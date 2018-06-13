@@ -1,0 +1,783 @@
+'SequentialMode
+
+'CR1000 Datalogger
+''''''''''''''''''''''''''''''''''''''''''''''''
+'        CO2 advection measurement
+''''''''''''''''''''''''''''''''''''''''''''''''
+' Peng Zhao
+' Institute of Ecology, University of Innsbruck
+' This script is used to collect data and communicate with Arduino for controlling valves
+' in the CO2 advection measurement.
+' This script cowork with advection_arduino_2.ino for Arduino.
+' Updates
+' 2015-01-20, created. Collect data from three ThermoAir2 sensors.
+' 2015-03-18, send commands to Arduino.
+' 2015-06-03, program in a way as crazy as logger is.
+' 2015-06-23, integrate all sensors
+' 2016-04-04, the fourth Windsonic sensor is in.
+''''''''''''''''''''''''''''''''''''''''''''''''
+'''''''' wiring Datalogger - chamber 1 - Arduino
+'               --- chamber 1 blue 7 --- Arduino Pin 16
+' DIFF 5 H SE 9 --- chamber 1 brown 2
+' DIFF 5 L --- chamber 1 grey 5
+' DIFF 5 G --- chamber 1 white 1 and green  3
+' Powe out 12V --- chamber 1 tan10
+' free --- chamber 1 orange 9
+
+
+'''''''' wiring Datalogger - chamber 2 - Arduino
+'               --- chamber 2 blue 7 --- Arduino Pin 17
+' DIFF 6 H SE 11 --- chamber 2 brown 2
+' DIFF 6 L --- chamber 2 grey 5
+' DIFF 6 G --- chamber 2 white 1 and green  3
+' Powe out 12V --- chamber 2 tan10
+' free --- chamber 2 orange 9
+
+'''''''' wiring Datalogger - chamber 3 - Arduino
+'               --- chamber 3 blue 7 --- Arduino Pin 18
+' DIFF 7 H SE 13 --- chamber 3 brown 2
+' DIFF 7 L --- chamber 3 grey 5
+' DIFF 7 G --- chamber 3 white 1 and green  3
+' Powe out 12V --- chamber 2 tan10
+' free --- chamber 3 orange 9
+
+
+'''''''' wiring Datalogger - SDI - WindSonic4
+' com3 C5 --- SDI devices - WindSonic4 x 4
+' WindSonic 4 red --- 12VDC
+' WindSonic 4 black + silver --- G
+' WindSonic 4 green --- SDI
+
+'''''''' the following section for two sensors of windsonic option 1 is removed
+'''''''' wiring Datalogger -- Windsonic1 1 (max cable length 6.5 m )
+' GND --- grey
+' 12VDC - --- yellow
+' 12VDC + --- brown
+' com1 c1 --- green
+' com1 c2 --- white
+
+'''''''' wiring Arduino -- Windsonic1 2
+' GND --- grey
+' 12VDC - --- yellow
+' 12VDC + --- brown
+' com2 c3 --- green
+' com2 c4 --- white
+'''''''' the above section is removed
+
+
+'''''''' wiring Datalogger - AM16/32B Multiplexer - Arduino
+' DIFF 1 H and L --- AM16/32B com ODD H and L
+'         --- AM16/32B RES --- Arduino Pin 19
+' com3 C6 --- AM16/32B CLK
+
+'''''''' wiring Datalogger - Arduino
+' com4 TX C7 --- RX3 pin15
+' com4 RX C8 --- TX3 pin14
+' Power Out 12V --- Power
+' G --- G
+
+'''''''' wiring AM16/32B - HC (2x32)
+' 1H --- HC 1 blue humidity
+' 1L --- HC 1 white
+' 2H --- HC 1 brown temperature
+' 2L --- HC 1 white
+' 5V --- HC 1 black
+' GND -- HC 1 yellow/ green
+' .....
+' 15H --- HC 8 blue
+' 15L --- HC 8 white
+' 16H --- HC 8 brown
+' 16L --- HC 8 white
+
+'''''''' wiring AM16/32B - ThermoAir2
+' 17H --- ThermoAir2 1 yellow
+' 17L --- ThermoAir2 1 green
+' 18H --- ThermoAir2 2 white
+' 18L --- ThermoAir2 2 brown
+' 19H --- ThermoAir2 3 white
+' 19L --- ThermoAir2 3 brown
+
+'''''''' wiring AM16/32B - IRGA
+' 20H --- IRGA V OUT 2 (7) H2O ppt, 0-2.5v, 0 - 50 ppt
+' 20L --- IRGA V OUT 2 (8)
+' 21H --- IRGA V OUT 1 (9) CO2 ppm, 0-2.5v, 0-1000 ppm
+' 21L --- IRGA V OUT 1 (10)
+'         IRGA (1) --- 12V+
+'         IRGA (2) --- 12V-
+
+'''''''' wiring AM16/32B - flowmeters
+' 22H --- flowmeter sampling orange
+' 22L --- flowmeter sampling brown/blue --- G --- 24V-
+'     --- flowmeter sampling white --- 24V+
+' 23H --- flowmeter flushing orange
+' 23L --- flowmeter flushing brown/blue --- G --- 24V-
+'     --- flowmeter flushing white --- 24V+
+
+'''''''' wiring Datalogger - barometric pressure sensor
+' SE3  --- Setra 278 VOUT brown
+' G    --- Setra 278 AGND yellow
+' 12V+ --- Setra 278 SUPPLY white
+' 12V- --- Setra 278 GND grey
+' 5V   --- Setra 278 Green
+
+
+'''''''' wiring Arduino -- relays. suppose all valves are normally closed (N. O.) and normally the sampling line
+' Valves are normally open, i.e. their status in the sketch is power off.
+' A marked on the valve is the one for on/off. B is for sampling/flushing.
+' when logger sends:	| arduino gives voltage to pins:	| vSampling	| vFlushing
+'							i = 23	| 23, 25, 26											| i					| i+2, i+3
+'							i = 25	| 25, 27, 28											| i					| i+2, i+3
+'							i = 27	| 27, 29, 30											| i					| i+2, i+3
+'							...
+'							i = 43	| 43, 45, 46											| i					| i+2, i+3
+'							i = 45	| 45															| i					| 0
+'							i = 47	| 47, 48, 53											| i					| 0
+'							i = 49	| 49, 50, 53											| i					| 0
+'							i = 51	| 51, 52, 53											| i					| 0
+'							i = 99	| 23, 24													| 0					| 23, 24
+
+' Pin 23 - line 1.1 on/off             (A 1.1)
+' Pin 24 - line 1.1 sampling/flushing  	(B 1.1)
+' Pin 25 - line 1.2 on/off             (A 1.2)
+' Pin 26 - line 1.2 sampling/flushing  	(B 1.2)
+' Pin 27 - line 1.3 on/off             (A 1.3)
+' Pin 28 - line 1.3 sampling/flushing  	(B 1.3)
+' Pin 29 - line 2.1 on/off             (A 2.1)
+' Pin 30 - line 2.1 sampling/flushing  	(B 2.1)
+' Pin 31 - line 2.2 on/off             (A 2.2)
+' Pin 32 - line 2.2 sampling/flushing  	(B 2.2)
+' Pin 33 - line 2.3 on/off             (A 2.3)
+' Pin 34 - line 2.3 sampling/flushing  	(B 2.3)
+' Pin 35 - line 3.1 on/off             (A 3.1)
+' Pin 36 - line 3.1 sampling/flushing  	(B 3.1)
+' Pin 37 - line 3.2 on/off             (A 3.2)
+' Pin 38 - line 3.2 sampling/flushing  	(B 3.2)
+' Pin 39 - line 3.3 on/off             (A 3.3)
+' Pin 40 - line 3.3 sampling/flushing  	(B 3.3)
+' Pin 41 - line 4.1 on/off             (A 4.1)
+' Pin 42 - line 4.1 sampling/flushing  	(B 4.1)
+' Pin 43 - line 4.2 on/off             (A 4.2)
+' Pin 44 - line 4.2 sampling/flushing  	(B 4.2)
+' Pin 45 - line 4.3 on/off             (A 4.3)
+' Pin 46 - line 4.3 sampling/flushing  	(B 4.3)
+' Pin 47 - line chamber 1 head on/off
+' Pin 48 - line chamber 1 tail on/off
+' Pin 49 - line chamber 2 head on/off
+' Pin 50 - line chamber 2 tail on/off
+' Pin 51 - line chamber 3 head on/off
+' Pin 52 - line chamber 3 tail on/off
+' Pin 53 - line chambers on/off
+''''''''''''''''''''''''''''''''''''''''''''''''
+
+
+'''''''' declarations ''''''''''''''''''''''''''
+Const timescan = 3 'scan time, in second
+
+'Const timevalve = 6 ' for test. should be 90. ' time of valve open, in second
+'Const timechamber = 30 ' should be 210 ' time of chamber open, in second
+'Const timechamberflush = 3 ' for test.
+ 
+Const timevalve = 228 ' time of valve open, in second
+Const timechamber = 212 ' time of chamber open, in second
+Const timechamberflush = 48
+
+
+Public Batt_Volt
+Units Batt_Volt=Volts
+
+'''' AM16/32B
+Dim LCount
+Dim k
+
+'' HC
+Public obsVolt(24)
+Public hcT(8)
+Public hcRH(8)
+Units obsVolt = mV
+Units hcT = degree
+Units hcRH = %
+
+'''' ThermoAir2
+Public ta(3)
+Units ta = degree
+
+'''' IRGA
+Public irga_co2
+Units irga_co2 = ppm
+Public irga_h2o
+Units irga_h2o = ppt
+Units obsVolt = mV
+
+'''' flowmeters
+Public flowvolt_f, flowvolt_m
+Public flowrate_f, flowrate_m
+
+Units flowvolt_f = mV
+Units flowvolt_m = mV
+Units flowrate_f = l/min
+Units flowrate_m = l/min
+'''' Arduino. cowork with the script advection_arduino.ino uploaded to Arduino
+Public i, j
+' i is the command code sent to Arduino via com port. Arduino sometimes translates '0' or
+' '8', from Datalogger, into '>'. Thus, i is assigned only odd numbers in order to
+' avoind using '0' and '8' as command codes.
+Public clock
+Public vFlushing 'Arduino pin number of the flushing line
+Public vSampling 'Arduino pin number of the sampling line
+Public incheck 'receives feedback from Arduino
+Public fromArduino
+
+'''' Chamber temperature
+Const a = 0.0010690
+Const b = 0.00021207
+Const c = 0.0000000901954
+Dim CTV(3) as FLOAT, CTI(3) as FLOAT,CTR(3) as FLOAT
+Public chamberTVolt(3)
+Public chamberT(3)
+Public chamberStop(3)
+Public m
+Units chamberTVolt = mV
+Units chamberT = degree
+Units chamberStop = mV
+
+'''' Windsonic SDI
+Public windsonic1(3)
+Public windsonic2(3)
+Public windsonic3(3)
+Public windsonic4(3)
+Alias windsonic1(1) = wind_direction1
+Alias windsonic1(2) = wind_speed1
+Alias windsonic1(3) = diag1
+Alias windsonic2(1) = wind_direction2
+Alias windsonic2(2) = wind_speed2
+Alias windsonic2(3) = diag2
+Alias windsonic3(1) = wind_direction3
+Alias windsonic3(2) = wind_speed3
+Alias windsonic3(3) = diag3
+Alias windsonic4(1) = wind_direction4
+Alias windsonic4(2) = wind_speed4
+Alias windsonic4(3) = diag4
+Units wind_direction1 = degrees
+Units wind_speed1 = m/s
+Units diag1 = unitless
+Units wind_direction2 = degrees
+Units wind_speed2 = m/s
+Units diag2 = unitless
+Units wind_direction3 = degrees
+Units wind_speed3 = m/s
+Units diag3 = unitless
+Units wind_direction4 = degrees
+Units wind_speed4 = m/s
+Units diag4 = unitless
+Dim disable_flag1 AS Boolean
+Dim disable_flag2 AS Boolean
+Dim disable_flag3 AS Boolean
+Dim disable_flag4 AS Boolean
+Dim one
+Units one = samples
+
+'''''''' the following section is removed
+''''' WindSonic com 1
+'Dim Pos41, Pos42
+'Public WindString4 As String * 100	' Output-String des Windsensors
+'Public VWact4							' aktueller Messwert: Windgeschwindigkeit
+'Public DWact4							' aktueller Messwert: Windrichtung
+'Public windsonic4(4)
+'Alias windsonic4(1) = wind_direction4
+'Alias windsonic4(2) = wind_speed4
+'Alias windsonic4(3) = diag4
+'Alias windsonic4(4) = nmbr_bytes_rtrnd4
+'Units wind_direction4 = degrees
+'Units wind_speed4 = m/s
+'Units diag4 = arb
+'Dim in_bytes_str4 As String * 21
+'Dim checksum_flg4 As Boolean
+'Dim disable_flg4 As Boolean
+'Dim n4
+'Units n4 = samples
+
+
+''''' WindSonic com 2
+'Dim Pos51, Pos52
+'Public WindString5 As String * 100	' Output-String des Windsensors
+'Public VWact5							' aktueller Messwert: Windgeschwindigkeit
+'Public DWact5							' aktueller Messwert: Windrichtung
+'Public windsonic5(4)
+'Alias windsonic5(1) = wind_direction5
+'Alias windsonic5(2) = wind_speed5
+'Alias windsonic5(3) = diag5
+'Alias windsonic5(4) = nmbr_bytes_rtrnd5
+'Units wind_direction5 = degrees
+'Units wind_speed5 = m/s
+'Units diag5 = arb
+'Dim in_bytes_str5 As String * 21
+'Dim checksum_flg5 As Boolean
+'Dim disable_flg5 As Boolean
+'Dim n5
+'Units n5 = samples
+'''''''' the above section is removed
+
+''' Barometric sensor
+Public Pressure
+Public PressureVolt
+Units Pressure = mb
+Units PressureVolt = mV
+
+'''''''' define Data Tables '''''''''''''''''''''
+'''' ThermoAir2
+'DataTable(TableTA1,True,-1)
+'	DataInterval(0,5,Min,10)
+'	Minimum(1,Batt_Volt,FP2,False,True)
+'	Average(1,DiffVolt(1),FP2,False)
+'	StdDev(1,DiffVolt(1),FP2,False)
+'	Maximum(1,DiffVolt(1),FP2,False,True)
+'	Minimum(1,DiffVolt(1),FP2,False,True)
+'	Average(1,DiffVolt(2),FP2,False)
+'	StdDev(1,DiffVolt(2),FP2,False)
+'	Maximum(1,DiffVolt(2),FP2,False,True)
+'	Minimum(1,DiffVolt(2),FP2,False,True)
+'	Average(1,DiffVolt(3),FP2,False)
+'	StdDev(1,DiffVolt(3),FP2,False)
+'	Maximum(1,DiffVolt(3),FP2,False,True)
+'	Minimum(1,DiffVolt(3),FP2,False,True)
+'EndTable
+'
+'DataTable(TableTA2,True,-1)
+'	DataInterval(0,1440,Min,10)
+'	Minimum(1,Batt_Volt,FP2,False,False)
+'EndTable
+'
+''''' Arduino
+'DataTable(myTable,True,-1)
+'	Sample(1,vFlushing,Long)
+'	Sample(1,vSampling,Long)
+'EndTable
+
+
+DataTable(AdvData, True, -1)
+	cardout (0 ,-1)
+	DataInterval(0,timescan,Sec,10)
+	Minimum(1,Batt_Volt,FP2,False,False)
+
+	'valves
+	Sample(1,vFlushing,Long)
+	Sample(1,vSampling,Long)
+'	Sample(1,fromArduino,String)
+	' AM16/32B
+'	Average (1,obsVolt(1),FP2,False)
+'	Average (1,obsVolt(2),FP2,False)
+'	Average (1,obsVolt(3),FP2,False)
+'	Average (1,obsVolt(4),FP2,False)
+'	Average (1,obsVolt(5),FP2,False)
+'	Average (1,obsVolt(6),FP2,False)
+'	Average (1,obsVolt(7),FP2,False)
+'	Average (1,obsVolt(8),FP2,False)
+'	Average (1,obsVolt(9),FP2,False)
+'	Average (1,obsVolt(10),FP2,False)
+'	Average (1,obsVolt(11),FP2,False)
+'	Average (1,obsVolt(12),FP2,False)
+'	Average (1,obsVolt(13),FP2,False)
+'	Average (1,obsVolt(14),FP2,False)
+'	Average (1,obsVolt(15),FP2,False)
+'	Average (1,obsVolt(16),FP2,False)
+'	Average (1,obsVolt(17),FP2,False)
+'	Average (1,obsVolt(18),FP2,False)
+'	Average (1,obsVolt(19),FP2,False)
+'	Average (1,obsVolt(20),FP2,False)
+'	Average (1,obsVolt(21),FP2,False)
+'	Average (1,obsVolt(22),FP2,False)
+'	Average (1,obsVolt(23),FP2,False)
+'	Average (1,obsVolt(24),FP2,False)
+	' AM16/32B - HC
+	Average (1,hcT(1),FP2,False)
+	Average (1,hcT(2),FP2,False)
+	Average (1,hcT(3),FP2,False)
+	Average (1,hcT(4),FP2,False)
+	Average (1,hcT(5),FP2,False)
+	Average (1,hcT(6),FP2,False)
+	Average (1,hcT(7),FP2,False)
+	Average (1,hcT(8),FP2,False)
+	Average (1,hcRH(1),FP2,False)
+	Average (1,hcRH(2),FP2,False)
+	Average (1,hcRH(3),FP2,False)
+	Average (1,hcRH(4),FP2,False)
+	Average (1,hcRH(5),FP2,False)
+	Average (1,hcRH(6),FP2,False)
+	Average (1,hcRH(7),FP2,False)
+	Average (1,hcRH(8),FP2,False)
+	' AM16/32B - ThermoAir2
+	Average (1,ta(1),FP2,False)
+	Average (1,ta(2),FP2,False)
+	Average (1,ta(3),FP2,False)
+	' AM16-32B - IRGA
+	'	sample (1,irga_co2,FP2)
+	Average (1,irga_h2o,FP2,False)
+	Average (1,irga_co2,FP2,False)
+	' chamber temp
+	Average(1,chamberTVolt(1), FP2, False)
+	Average(1,chamberTVolt(2), FP2, False)
+	Average(1,chamberTVolt(3), FP2, False)
+	Average(1,chamberT(1), FP2, False)
+	Average(1,chamberT(2), FP2, False)
+	Average(1,chamberT(3), FP2, False)
+	Average(1,chamberStop(1), FP2, False)
+	Average(1,chamberStop(2), FP2, False)
+	Average(1,chamberStop(3), FP2, False)
+	' WindSoni SDI
+'	WindVector (1,wind_speed1,wind_direction1,IEEE4,disable_flag1,0,0,0)
+'	FieldNames ("mean_wind_speed1,mean_wind_direction1,std_wind_dir1")
+	WindVector (1,wind_speed1,wind_direction1,FP2,0,0,0,2)
+	FieldNames ("mean_wind_speed1,resultant_mean_wind_speed1, resultant_mean_wind_direction1, stde_wind_dir1")
+	Totalize (1,one,IEEE4,disable_flag1)
+	FieldNames ("n1_TOT")
+	Totalize (1,one,IEEE4,diag1<>1)
+	FieldNames ("diag1_1_TOT")
+	Totalize (1,one,IEEE4,diag1<>2)
+	FieldNames ("diag1_2_TOT")
+	Totalize (1,one,IEEE4,diag1<>4)
+	FieldNames ("diag1_4_TOT")
+	Totalize (1,one,IEEE4,diag1<>8)
+	FieldNames ("diag1_8_TOT")
+	Totalize (1,one,IEEE4,diag1<>9)
+	FieldNames ("diag1_9_TOT")
+	Totalize (1,one,IEEE4,diag1<>10)
+	FieldNames ("diag1_10_TOT")
+	Totalize (1,one,IEEE4,diag1<>NAN)
+	FieldNames ("nnd1_TOT")
+
+'	WindVector (1,wind_speed2,wind_direction2,IEEE4,disable_flag2,0,0,0)
+'	FieldNames ("mean_wind_speed2,mean_wind_direction2,std_wind_dir2")
+	WindVector (1,wind_speed2,wind_direction2,FP2,0,0,0,2)
+	FieldNames ("mean_wind_speed2,resultant_mean_wind_speed2, resultant_mean_wind_direction2, stde_wind_dir2")
+	Totalize (1,one,IEEE4,disable_flag2)
+	FieldNames ("n2_TOT")
+	Totalize (1,one,IEEE4,diag2<>1)
+	FieldNames ("diag2_1_TOT")
+	Totalize (1,one,IEEE4,diag2<>2)
+	FieldNames ("diag2_2_TOT")
+	Totalize (1,one,IEEE4,diag2<>4)
+	FieldNames ("diag2_4_TOT")
+	Totalize (1,one,IEEE4,diag2<>8)
+	FieldNames ("diag2_8_TOT")
+	Totalize (1,one,IEEE4,diag2<>9)
+	FieldNames ("diag2_9_TOT")
+	Totalize (1,one,IEEE4,diag2<>10)
+	FieldNames ("diag2_10_TOT")
+	Totalize (1,one,IEEE4,diag2<>NAN)
+	FieldNames ("nnd2_TOT")
+	
+'	WindVector (1,wind_speed3,wind_direction3,IEEE4,disable_flag3,0,0,0)
+'	FieldNames ("mean_wind_speed3,mean_wind_direction3,std_wind_dir3")
+	WindVector (1,wind_speed3,wind_direction3,FP2,0,0,0,2)
+	FieldNames ("mean_wind_speed3,resultant_mean_wind_speed3, resultant_mean_wind_direction3, stde_wind_dir3")
+	Totalize (1,one,IEEE4,disable_flag3)
+	FieldNames ("n3_TOT")
+	Totalize (1,one,IEEE4,diag3<>1)
+	FieldNames ("diag3_1_TOT")
+	Totalize (1,one,IEEE4,diag3<>2)
+	FieldNames ("diag3_2_TOT")
+	Totalize (1,one,IEEE4,diag3<>4)
+	FieldNames ("diag3_4_TOT")
+	Totalize (1,one,IEEE4,diag3<>8)
+	FieldNames ("diag3_8_TOT")
+	Totalize (1,one,IEEE4,diag3<>9)
+	FieldNames ("diag3_9_TOT")
+	Totalize (1,one,IEEE4,diag3<>10)
+	FieldNames ("diag3_10_TOT")
+	Totalize (1,one,IEEE4,diag3<>NAN)
+	FieldNames ("nnd3_TOT")
+
+'	WindVector (1,wind_speed4,wind_direction4,IEEE4,disable_flag4,0,0,0)
+'	FieldNames ("mean_wind_speed4,mean_wind_direction4,std_wind_dir4")
+	WindVector (1,wind_speed4,wind_direction4,FP2,0,0,0,2)
+	FieldNames ("mean_wind_speed4,resultant_mean_wind_speed4, resultant_mean_wind_direction4, stde_wind_dir4")
+	Totalize (1,one,IEEE4,disable_flag4)
+	FieldNames ("n4_TOT")
+	Totalize (1,one,IEEE4,diag4<>1)
+	FieldNames ("diag4_1_TOT")
+	Totalize (1,one,IEEE4,diag4<>2)
+	FieldNames ("diag4_2_TOT")
+	Totalize (1,one,IEEE4,diag4<>4)
+	FieldNames ("diag4_4_TOT")
+	Totalize (1,one,IEEE4,diag4<>8)
+	FieldNames ("diag4_8_TOT")
+	Totalize (1,one,IEEE4,diag4<>9)
+	FieldNames ("diag4_9_TOT")
+	Totalize (1,one,IEEE4,diag4<>10)
+	FieldNames ("diag4_10_TOT")
+	Totalize (1,one,IEEE4,diag4<>NAN)
+	FieldNames ("nnd4_TOT")
+'''''''' the following section is removed
+'	WindVector(1,VWact4,DWact4,FP2,0,0,0,2)
+'	WindVector(1,VWact5,DWact5,FP2,0,0,0,2)
+'''''''' the above section is removed
+
+'	WindVector (1,wind_speed4,wind_direction4,IEEE4,disable_flg4,0,0,0)
+'FieldNames ("mean_wind_speed,mean_wind_direction,std_wind_dir")
+'Totalize (1,n4,IEEE4,disable_flg4)
+'FieldNames ("samples_TOT")
+'Totalize (1,n4,IEEE4,diag4<>1)
+'FieldNames ("diag_1_TOT")
+'Totalize (1,n4,IEEE4,diag4<>2)
+'FieldNames ("diag_2_TOT")
+'Totalize (1,n4,IEEE4,diag4<>4)
+'FieldNames ("diag_4_TOT")
+'Totalize (1,4n,IEEE4,diag4<>8)
+'FieldNames ("diag_8_TOT")
+'Totalize (1,n4,IEEE4,diag4<>9)
+'FieldNames ("diag_9_TOT")
+'Totalize (1,n4,IEEE4,diag4<>10)
+'FieldNames ("diag_10_TOT")
+'Totalize (1,n4,IEEE4,nmbr_bytes_rtrnd4<>0)
+'FieldNames ("nnd_TOT")
+'Totalize (1,n4,IEEE4,nmbr_bytes_rtrnd4<>0 IMP checksum_flg4)
+'FieldNames ("checksum_err_TOT")
+	
+	Average (1,flowvolt_m,FP2,False)
+	Average (1,flowvolt_f,FP2,False)
+	Average (1,PressureVolt,FP2,False)
+	Average (1,Pressure,FP2,False)	
+EndTable
+
+'***********************************************************************************
+'Sub ReadWindString ' Liest die Messwerte aus dem String des WindSonic
+'	Dim Pos1, Pos2
+'
+'	Pos1 = InStr(1,WindString,",",2)
+'	If ( Pos1 <> 0 ) Then
+'		Pos2 = InStr(Pos1+1,WindString,",",2)
+'		If ( Pos2 - Pos1 > 1 ) Then
+'			DWact = Mid(WindString,Pos1 + 1, Pos2 - Pos1 - 1)
+'			Pos1 = InStr(Pos2+1,WindString,",",2)
+'			If (Pos1 - Pos2 > 1) Then
+'				VWact = Mid(WindString, Pos2+1, Pos1 - Pos2 - 1)
+'			EndIf
+'		EndIf
+'	EndIf
+'EndSub
+
+'''''''' main program '''''''''''''''''''''''''''''''
+BeginProg
+	one = 1
+	clock = -timescan
+'	delay (0,10000,mSec)
+	SerialOpen(Com4,9600,16,0,10000)
+	Scan(timescan,Sec,1,0)
+		Battery(Batt_Volt)
+		' valve control''''''''''''''''''''''''''''''''''''
+		clock = clock + timescan
+		if clock = 0 then
+			'''''' communication with Arduino
+			'''' 1a: send commands to Arduino to contral valves
+'			SerialFlush(Com4)
+'			SerialOut(Com4,66,"",0,100) ' send command i to Arduino
+			i = 99
+			vSampling = 0
+			vFlushing = 23
+			j = 1
+			SerialFlush(Com4)
+			SerialOut(Com4,i,"",0,100) ' send command i to Arduino
+		elseif (clock = timevalve * j And j < 12) then
+			i = 21 + 2 * j
+			vSampling = i
+			vFlushing = vSampling + 2
+			'		for i = 23 to 43 step 2
+			SerialFlush(Com4)
+			SerialOut(Com4,i,"",0,100) ' send command i to Arduino
+			j = j + 1
+		elseif clock = timevalve * 12 then
+			i = 45
+			vSampling = i
+			vFlushing = 0
+			SerialFlush(Com4)
+			SerialOut(Com4,45,"",0,100) ' send command i to Arduino
+		elseif clock = timevalve * 13 then
+			i = 47
+			vSampling = i
+			vFlushing = 0
+			SerialFlush(Com4)
+			SerialOut(Com4,i,"",0,100) ' send command i to Arduino
+			
+		elseif clock = timevalve * 13 + timechamberflush then
+			SerialFlush(Com4)
+			SerialOut(Com4,75,"",0,100) ' send command i to Arduino
+
+		elseif clock = timevalve * 13 + timechamber then
+			i = 49
+			vSampling = i
+			vFlushing = 0
+			SerialFlush(Com4)
+			SerialOut(Com4,i,"",0,100) ' send command i to Arduino
+
+		elseif clock = timevalve * 13 + timechamber + timechamberflush then
+			SerialFlush(Com4)
+			SerialOut(Com4,77,"",0,100) ' send command i to Arduino
+
+			
+			'PortSet(1,1) ' measurement.
+'		elseif clock = timevalve * 13 + timechamber * 2 then
+'			PortSet(1,0) ' park
+		elseif clock = timevalve * 13 + timechamber * 2 then
+			i = 51
+			vSampling = i
+			vFlushing = 0
+			SerialFlush(Com4)
+			SerialOut(Com4,i,"",0,100) ' send command i to Arduino
+
+		elseif clock = timevalve * 13 + timechamber * 2 + timechamberflush then
+			SerialFlush(Com4)
+			SerialOut(Com4,79,"",0,100) ' send command i to Arduino
+
+'			PortSet(2,1) ' measurement. 'these three lines are executed before the line i = 51. Do not ask me why.
+'		elseif clock = timevalve * 13 + timechamber * 3 then
+'			PortSet(2,0) ' park
+		elseif clock = timevalve * 13 + timechamber * 3 then
+		
+			i = 99
+			vSampling = 0
+			vFlushing = 23
+			j = 1 ' not sure if instert here
+			SerialFlush(Com4)
+			SerialOut(Com4,i,"",0,100) ' send command i to Arduino
+
+'			PortSet(4,1) ' measurement. 'these three lines are executed before the line i = 99. Do not ask me why.
+'		elseif clock = timevalve * 13 + timechamber * 4 then
+
+'			PortSet(4,0) ' park
+
+'		elseif clock =  timevalve * 13 + timechamber * 4 then 'not sure to delete or not
+			clock = 0 ' not sure if clock = -timescan
+		endif
+		SerialInBlock(Com4,fromArduino,10)
+
+		' AM16/32B
+		SerialFlush(Com4)
+		SerialOut(Com4,"71","",0,100) ' send command i to Arduino
+		LCount = 1
+		SubScan(0,uSec,24)
+			PulsePort(6,100)
+			Voltdiff (obsVolt(LCount),1,mV5000,1,True,6000,_60Hz,1.0,0.0)
+			LCount = LCount + 1
+		NextSubScan
+		SerialFlush(Com4)
+		SerialOut(Com4,"73","",0,100) ' send command i to Arduino
+
+		' flowmeters
+		flowvolt_m = obsVolt(22)
+		flowrate_m = flowvolt_m / 5000 * 2
+		flowvolt_f = obsVolt(23)
+		flowrate_f = flowvolt_f / 5000 * 20
+
+		' pressure
+		VoltSE(Pressure,1,mV2500,3,1,0,_60Hz,0.2,600.0)
+		' HC
+		for k = 1 to 8
+			hcRH(k) = obsVolt(2 * k - 1) / 10
+			hcT(k) = obsVolt(2 * k) / 10 - 40
+		next k
+
+		' ThermoAir2
+		for k = 17 to 19
+			ta(k) = obsVolt(k)/1000
+		next k
+		
+		' IRGA
+		irga_h2o = obsVolt(20)/2500 * 50
+		irga_co2 = obsVolt(21)/2500 * 1000
+
+		' Windsonic - SDI
+		SDI12Recorder (windsonic1,5,1,"R0!",1,0)
+		If ( wind_direction1 = NAN ) Then
+			wind_speed1 = NAN
+			diag1 = NAN
+		EndIf
+		disable_flag1 = (wind_direction1=NAN) OR (diag1<>0)
+
+		SDI12Recorder (windsonic2,5,2,"R0!",1,0)
+		If ( wind_direction2 = NAN ) Then
+			wind_speed2 = NAN
+			diag2 = NAN
+		EndIf
+		disable_flag2 = (wind_direction2=NAN) OR (diag2<>0)
+
+
+		SDI12Recorder (windsonic3,5,3,"R0!",1,0)
+		If ( wind_direction3 = NAN ) Then
+			wind_speed3 = NAN
+			diag3 = NAN
+		EndIf
+		disable_flag3 = (wind_direction3=NAN) OR (diag3<>0)
+		
+		SDI12Recorder (windsonic4,5,4,"R0!",1,0)
+		If ( wind_direction4 = NAN ) Then
+			wind_speed4 = NAN
+			diag4 = NAN
+		EndIf
+		disable_flag4 = (wind_direction4=NAN) OR (diag4<>0)
+
+'''''''' the following section is removed		
+'		' Windsonic 4 - com 1
+'		SerialOpen(Com1,9600,0,50,100)
+'		SerialFlush(Com1)
+'		SerialIn(WindString4,Com1,105,2,100)
+'		SerialIn(WindString4,Com1,10,3,100)
+'		SerialClose(Com1)
+'	Pos41 = InStr(1,WindString4,",",2)
+'	If ( Pos41 <> 0 ) Then
+'		Pos42 = InStr(Pos41+1,WindString4,",",2)
+'		If ( Pos42 - Pos41 > 1 ) Then
+'			DWact4 = Mid(WindString4,Pos41 + 1, Pos42 - Pos41 - 1)
+'			Pos41 = InStr(Pos42+1,WindString4,",",2)
+'			If (Pos41 - Pos42 > 1) Then
+'				VWact4 = Mid(WindString4, Pos42+1, Pos41 - Pos42 - 1)
+'			EndIf
+'		EndIf
+'	EndIf
+'	
+'	SerialOpen(Com2,9600,0,50,100)
+'		SerialFlush(Com2)
+'		SerialIn(WindString5,Com2,105,2,100)
+'		SerialIn(WindString5,Com2,10,3,100)
+'		SerialClose(Com2)
+'	Pos51 = InStr(1,WindString5,",",2)
+'	If ( Pos51 <> 0 ) Then
+'		Pos52 = InStr(Pos51+1,WindString5,",",2)
+'		If ( Pos52 - Pos51 > 1 ) Then
+'			DWact5 = Mid(WindString5,Pos51 + 1, Pos52 - Pos51 - 1)
+'			Pos51 = InStr(Pos52+1,WindString5,",",2)
+'			If (Pos51 - Pos52 > 1) Then
+'				VWact5 = Mid(WindString5, Pos52+1, Pos51 - Pos52 - 1)
+'			EndIf
+'		EndIf
+'	EndIf
+'''''''' the above section is removed
+
+		' Chember Temperature
+		'VoltDiff(chamberTVolt(1),1,mV5000,5,True,0,_60Hz,1.0,0.0)
+		VoltSe (chamberTVolt(1),1,mV5000,9,True,0,250,1,0)
+		CTV(1) = chamberTVolt(1) * 0.001
+		CTI(1) = (5 - CTV(1))/28000
+		CTR(1) = CTV(1)/CTI(1)
+		chamberT(1) = (1/(a+(b*LN(CTR(1)))+(c*(LN(CTR(1))^3)))) - 273.15
+		VoltSe (chamberStop(1),1,mV5000,10,True,0,250,1,0)
+
+		'VoltDiff(chamberTVolt(2),1,mV5000,6,True,0,_60Hz,1.0,0.0)
+		VoltSe (chamberTVolt(2),1,mV5000,11,True,0,250,1,0)
+		CTV(2) = chamberTVolt(2) * 0.001
+		CTI(2) = (5 - CTV(2))/28000
+		CTR(2) = CTV(2)/CTI(2)
+		chamberT(2) = (1/(a+(b*LN(CTR(2)))+(c*(LN(CTR(2))^3)))) - 273.15
+		VoltSe (chamberStop(2),1,mV5000,12,True,0,250,1,0)
+		
+		'VoltDiff(chamberTVolt(3),1,mV5000,7,True,0,_60Hz,1.0,0.0)
+		VoltSe (chamberTVolt(3),1,mV5000,13,True,0,250,1,0)
+		CTV(3) = chamberTVolt(3) * 0.001
+		CTI(3) = (5 - CTV(3))/28000
+		CTR(3) = CTV(3)/CTI(3)
+		chamberT(3) = (1/(a+(b*LN(CTR(3)))+(c*(LN(CTR(3))^3)))) - 273.15
+		VoltSe (chamberStop(3),1,mV5000,14,True,0,250,1,0)
+		
+		CallTable AdvData
+	NextScan
+
+EndProg
