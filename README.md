@@ -23,6 +23,15 @@ devtools::install_github('pzhaonet/advr')
 # load the advr package
 library(advr)
 
+# download the datalogger program (.CR1)
+get_logger()
+
+# download the microcontroller program (.ino)
+get_arduino()
+
+# download a demo data file
+get_data()
+
 # download a demo data file
 get_data()
 
