@@ -7,14 +7,14 @@
 plot_adv(aa, sub_by = 1, suffix = "daily")
 }
 \arguments{
-\item{aa}{pre processed raw data frame}
+\item{aa}{A data frame with pre-processed raw data}
 
-\item{sub_by}{sub figure by n days}
+\item{sub_by}{A integer or NA indicating that the sub-figures are plotted by n days. if sub_by == NA, then plot the entire data set.}
 
-\item{suffix}{for the file name of the image}
+\item{suffix}{A character string with the file name of the image}
 }
 \value{
-figures in day, hour, or other length
+Figures in day, hour, or other length.
 }
 \description{
 plot raw data in day, hour, or other length

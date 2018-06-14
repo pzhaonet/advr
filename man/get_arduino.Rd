@@ -7,7 +7,7 @@
 get_arduino()
 }
 \value{
-an .ino file
+an .ino file for the Arduino microcontroller
 }
 \description{
 Download an Arduino program file

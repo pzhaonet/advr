@@ -7,20 +7,18 @@
 read_adv(path_raw, path_raw_header)
 }
 \arguments{
-\item{path_raw}{the path of the raw data file}
+\item{path_raw}{A character string with the path of the raw data file.}
 
-\item{path_raw_header}{the path of header file for the raw data}
+\item{path_raw_header}{A character string with path of header file for the raw data.}
 }
 \value{
-a data frame with pre processed raw data
+A data frame with pre-processed raw data
 }
 \description{
 Read and pre process the raw data
 }
 \examples{
-if (!dir.exists("demo")) dir.create("demo")
-download.file("https://github.com/pzhaonet/advr/raw/master/inst2/data.zip", 
-    "demo/data.zip")
-unzip(zipfile = "demo/data.zip", exdir = "demo")
-adv_data <- read_adv("demo/data_sample.csv", "demo/data_header.csv")
+get_data("demo")
+adv_data <- read_adv(path_raw = "demo/data_sample.csv", 
+    path_raw_header = "demo/data_header.csv")
 }

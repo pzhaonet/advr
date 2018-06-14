@@ -7,7 +7,7 @@
 get_logger()
 }
 \value{
-a .CR1 program file
+a .CR1 program file for the data logger
 }
 \description{
 Download the logger program
