@@ -41,4 +41,4 @@ plot_adv(aa = adv_data)
 # visualize the entire raw data file 
 plot_adv(aa = adv_data, sub_by = NA)
 ```
-
+[![](https://github.com/pzhaonet/advr/raw/master/img/all_adv_2017-07-12.png)](https://github.com/pzhaonet/advr/raw/master/img/all_adv_2017-07-12.png)
