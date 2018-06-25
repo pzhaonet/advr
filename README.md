@@ -32,9 +32,6 @@ get_arduino()
 # download a demo data file
 get_data()
 
-# download a demo data file
-get_data()
-
 # read the raw data file and pre-process the data
 adv_data <- read_adv("demo/data_sample.csv", "demo/data_header.csv")
 
