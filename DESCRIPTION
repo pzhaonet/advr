@@ -1,6 +1,6 @@
 Package: advr
-Version: 0.0.0
-Date: 2018-06-13
+Version: 0.0.1
+Date: 2018-06-26
 Title: Functions for the advection project
 Author: Peng Zhao
 Maintainer: Peng Zhao <pzhao@pzhao.net>

@@ -410,8 +410,10 @@ plot_adv <- function(aa, sub_by = 1, suffix = 'daily'){
 #' @examples
 #' get_logger()
 get_logger <- function(){
-  myurl <- 'https://github.com/pzhaonet/advr/raw/master/inst2/logger.CR1'
- download.file(url = myurl, destfile = 'logger.CR1')
+  filesuffix <- c('previous', 'additional_inlet')
+  filename <- paste0('logger_', filesuffix, '.CR1')
+  myurl <- paste0('https://github.com/pzhaonet/advr/raw/master/inst2/', filename)
+  for (i in 1:length(filesuffix)) download.file(url = myurl[i], destfile = filename[i])
 }
 
 #' Download an Arduino program file
@@ -422,8 +424,10 @@ get_logger <- function(){
 #' @examples
 #' get_arduino()
 get_arduino <- function(){
-  myurl <- 'https://github.com/pzhaonet/advr/raw/master/inst2/arduino.ino'
-  download.file(url = myurl, destfile = 'arduino.ino')
+  filesuffix <- c('previous', 'additional_inlet')
+  filename <- paste0('arduino_', filesuffix, '.ino')
+  myurl <- paste0('https://github.com/pzhaonet/advr/raw/master/inst2/', filename)
+  for (i in 1:length(filesuffix)) download.file(url = myurl[i], destfile = filename[i])
 }
 
 #' Download a demo data file
